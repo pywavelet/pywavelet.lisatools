@@ -6,6 +6,7 @@ from .sensitivity import SensitivityMatrix
 from pywavelet.types import Wavelet
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LogNorm, PowerNorm
 
 
 class AnalysisContainer(analysiscontainer.AnalysisContainer):
@@ -56,7 +57,15 @@ class AnalysisContainer(analysiscontainer.AnalysisContainer):
 
         for i in range(num_channels):
             self.data_res_arr.wdm[i].plot(ax=axes[i, 0], show_colorbar=False)
-            self.sens_mat.wdm[i].plot(ax=axes[i, ax_psd_idx], show_colorbar=False, zscale='log')
+            psd = self.sens_mat.wdm[i].data
+            norm = LogNorm(vmin=psd.min(), vmax=10**-43, clip=True)
+            cmap = plt.get_cmap('PuBu')
+            cmap.set_under('black')
+            self.sens_mat.wdm[i].plot(
+                ax=axes[i, ax_psd_idx], show_colorbar=False, norm=norm,
+                cmap=cmap
+            )
+
 
         axes[0, 0].set_title("Data")
         axes[0, ax_psd_idx].set_title("PSD")
