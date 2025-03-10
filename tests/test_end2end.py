@@ -4,18 +4,18 @@ import matplotlib.pyplot as plt
 
 from fastlisaresponse import ResponseWrapper
 from lisatools.sensitivity import A1TDISens, E1TDISens
-from lisatools.detector import EqualArmlengthOrbits, ESAOrbits
+from lisatools.detector import EqualArmlengthOrbits
 
-from lisatools_WDM.datacontainer import DataResidualArray
-from lisatools_WDM.sensitivity import SensitivityMatrix
-from lisatools_WDM.analysiscontainer import AnalysisContainer
+from lisatools_wdm.datacontainer import DataResidualArray
+from lisatools_wdm.sensitivity import SensitivityMatrix
+from lisatools_wdm.analysiscontainer import AnalysisContainer
 from tqdm.auto import tqdm, trange
 
 YRSID_SI = 31558149.763545603
 
 
 class GBWave:
-    def __call__(self, A, f, fdot, iota, phi0, psi, T=1.0, dt=10.0):
+    def __call__(self, A, f, fdot, iota, phi0, psi, T=1.0, dt=10.0, gaps:bool=False):
         # get the t array
         t = np.arange(0.0, T * YRSID_SI, dt)
         cos2psi = np.cos(2.0 * psi)
@@ -36,13 +36,23 @@ class GBWave:
         hp = hSp * cos2psi - hSc * sin2psi
         hc = hSp * sin2psi + hSc * cos2psi
 
-        return hp + 1j * hc
+        signal = hp + 1j * hc
+
+        if gaps:
+            # ZERO data every 14 days for 7 hours
+            gap_mask = np.zeros_like(t)
+            gap_mask[::int(14*24*3600/dt)] = 1
+            signal *= gap_mask
+
+        return signal
+
+
 
 def test_e2e():
     gb = GBWave()
     use_gpu = False
 
-    T = 0.25  # years
+    T = 2.0  # years
     t0 = 100000.0  # time at which signal starts (chops off data at start of waveform where information is not correct)
 
     sampling_frequency = 0.01
@@ -77,6 +87,8 @@ def test_e2e():
         **tdi_kwargs_esa,
     )
 
+    Nf = 64
+
     # define GB parameters
     A = 1.084702251e-22
     f = 2.35962078e-3
@@ -99,17 +111,24 @@ def test_e2e():
     ]
 
     ae_data = gb_lisa_esa(*default_args)
-    data = DataResidualArray(ae_data, dt=dt)
+    data = DataResidualArray(ae_data, dt=dt, Nf=Nf)
 
     fig, ax = plt.subplots(2, 1, sharex=True)
     for i, lab in enumerate(["A", "E"]):
         ax[i].plot(np.arange(len(ae_data[0])) * dt / YRSID_SI, ae_data[i])
         ax[i].set_ylabel(lab)
+    ax[-1].set_xlabel("t [yrs]")
     fig.savefig("tdi_timedomain.png")
     plt.close(fig)
 
-    sens_mat = SensitivityMatrix(data.f_arr, [A1TDISens, E1TDISens])
-    analysis = AnalysisContainer(data, sens_mat, signal_gen=gb_lisa_esa)
+    sens_mat = SensitivityMatrix(
+        data.f_arr,
+        [A1TDISens, E1TDISens],
+        f_grid=data.f_grid,
+        t_grid=data.t_grid,
+        dt=dt
+    )
+    analysis = AnalysisContainer(data, sens_mat, signal_gen=gb_lisa_esa, Nf=Nf)
 
     # plot data
     fig, ax = analysis.loglog()
@@ -121,23 +140,41 @@ def test_e2e():
     plt.savefig("tdi_freqdomain.png")
     plt.close(fig)
 
+
+    fig, ax = analysis.plot_wdm()
+    fig.savefig("tdi_wdm.png")
+    plt.close(fig)
+
     # 1D LnL scan over amplitude
     precision = A / np.sqrt(snr)
     a_range = np.linspace(A - 1.5 * precision, A + 1.5 * precision, 9)
     lnl = np.zeros_like(a_range)
+    wdm_lnl = np.zeros_like(a_range)
     for i in trange(len(a_range)):
         args = default_args.copy()
         args[0] = a_range[i]
         lnl[i] = analysis.calculate_signal_likelihood(*args)
+        wdm_lnl[i] = analysis.calculate_wdm_likelihood(*args)
 
     fig, ax = plt.subplots()
-    ax.plot(a_range, lnl)
+    ax.plot(a_range, lnl, label="Freq", color="b")
+    # plot the WDM likelihood
+    ax2 = ax.twinx()
+    ax2.plot(a_range, wdm_lnl, label="WDM", linestyle="--", color="b")
     ymin, ymax = ax.get_ylim()
     ax.vlines(A, ymin, ymax, color="r", linestyle="--")
     ax.set_xlabel("A")
     ax.set_xlim(a_range.min(), a_range.max())
     ax.axvspan(A - precision, A + precision, alpha=0.5, color="gray")
     ax.set_ylim(bottom=lnl.min())
-    ax.set_ylabel("LnL")
+    ax.legend(
+        handles=[
+            plt.Line2D([0], [0], color="b", linestyle="-", label="Freq"),
+            plt.Line2D([0], [0], color="b", linestyle="--", label="WDM"),
+        ]
+    )
+    ax.set_ylabel("Freq LnL")
+    ax2.set_ylabel("WDM LnL")
+    plt.tight_layout()
     fig.savefig("lnl_scan.png")
     plt.close(fig)
