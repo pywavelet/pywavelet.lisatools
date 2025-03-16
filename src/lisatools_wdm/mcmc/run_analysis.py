@@ -4,6 +4,36 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tqdm.auto import trange
+from eryn.ensemble import EnsembleSampler
+from eryn.prior import ProbDistContainer, uniform_dist
+from eryn.state import State
+
+
+def wrapper_likelihood(x, fixed_parameters, freqs, analysis, **kwargs):
+    all_parameters = np.zeros(12)
+    mT = x[0]
+    q = x[1]
+    all_parameters[0] = mT / (1 + q)
+    all_parameters[1] = mT * q / (1 + q)
+    all_parameters[5] = x[2]
+    all_parameters[-1] = x[3]
+
+    all_parameters[np.array([2, 3, 4, 6, 7, 8, 9, 10])] = fixed_parameters
+
+    ll = analysis.calculate_signal_likelihood(
+        *all_parameters,
+        waveform_kwargs=dict(
+            length=1024,
+            combine=False,  # TODO: check this
+            direct=False,
+            fill=True,
+            squeeze=True,
+            freqs=freqs
+        ),
+        source_only=True
+        # data_arr_kwargs=dict(f_arr=freqs)
+    )
+    return ll
 
 
 def run_analysis(mcmc_data:MCMCData):
@@ -13,42 +43,59 @@ def run_analysis(mcmc_data:MCMCData):
     analysis = mcmc_data.analysis
     default_args = mcmc_data.default_args
 
+    priors = {"mbh": ProbDistContainer({
+        0: uniform_dist(1e5, 5e6),
+        1: uniform_dist(0.05, 0.999999),
+        2: uniform_dist(0.0, 2 * np.pi),
+        3: uniform_dist(0.0, Tobs + 24 * 3600.0),
+    })}
 
-    # 1D LnL scan over amplitude
-    precision = A / np.sqrt(snr)
-    a_range = np.linspace(A - 1.5 * precision, A + 1.5 * precision, 9)
-    lnl = np.zeros_like(a_range)
-    wdm_lnl = np.zeros_like(a_range)
-    for i in trange(len(a_range)):
-        args = default_args.copy()
-        args[0] = a_range[i]
-        lnl[i] = analysis.calculate_signal_likelihood(*args)
-        wdm_lnl[i] = analysis.calculate_wdm_likelihood(*args)
+    injection_params = np.array([
+        m1 + m2,
+        m2 / m1,
+        chi1,
+        chi2,
+        dist,
+        phi_ref,
+        f_ref,
+        inc,
+        lam,
+        beta,
+        psi,
+        t_ref
+    ])
 
-    plot_lnl(a_range, lnl, wdm_lnl, A, precision)
+    fixed_parameters = np.array([
+        chi1,
+        chi2,
+        dist,
+        f_ref,
+        inc,
+        lam,
+        beta,
+        psi,
+    ])
 
+    periodic = {"mbh": {2: 2 * np.pi}}
 
-def plot_lnl(a_range, lnl, wdm_lnl, A, precision):
-    fig, ax = plt.subplots()
-    ax.plot(a_range, lnl, label="Freq", color="b")
-    # plot the WDM likelihood
-    ax2 = ax.twinx()
-    ax2.plot(a_range, wdm_lnl, label="WDM", linestyle="--", color="b")
-    ymin, ymax = ax.get_ylim()
-    ax.vlines(A, ymin, ymax, color="r", linestyle="--")
-    ax.set_xlabel("A")
-    ax.set_xlim(a_range.min(), a_range.max())
-    ax.axvspan(A - precision, A + precision, alpha=0.5, color="gray")
-    ax.set_ylim(bottom=lnl.min())
-    ax.legend(
-        handles=[
-            plt.Line2D([0], [0], color="b", linestyle="-", label="Freq"),
-            plt.Line2D([0], [0], color="b", linestyle="--", label="WDM"),
-        ]
+    ntemps = 10
+    nwalkers = 32
+    ndims = {"mbh": 4}
+    sampler = EnsembleSampler(
+        nwalkers,
+        ndims,
+        wrapper_likelihood,
+        priors,
+        args=(fixed_parameters, freqs, analysis),
+        branch_names=["mbh"],
+        tempering_kwargs=dict(ntemps=ntemps),
+        nleaves_max=dict(mbh=1),
+        periodic=periodic
     )
-    ax.set_ylabel("Freq LnL")
-    ax2.set_ylabel("WDM LnL")
-    plt.tight_layout()
-    fig.savefig("lnl_scan.png")
-    plt.close(fig)
 
+    injection_params_sub = np.array([m1 + m2, m2 / m1, phi_ref, t_ref])
+    start_params = injection_params_sub[None, None, None, :] * (
+                1 + 1e-7 * np.random.randn(ntemps, nwalkers, 1, injection_params_sub.shape[0]))
+    start_state = State({"mbh": start_params})
+    sampler.compute_log_prior(start_state.branches_coords)
+    sampler.run_mcmc(start_state, 10, progress=True)
