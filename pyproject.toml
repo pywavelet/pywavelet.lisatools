@@ -25,6 +25,8 @@ classifiers = [
 dependencies = [
     "pywavelet",
     "fastlisaresponse",
+    "lisaanalysistools",
+    "requests",
     "scipy>=1.10.0", #
     "click",
     "numpy",
