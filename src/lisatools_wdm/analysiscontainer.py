@@ -1,4 +1,3 @@
-from gwpy.io.gwf import num_channels
 from lisatools import analysiscontainer
 from typing import Any, Optional, List
 from .datacontainer import DataResidualArray
