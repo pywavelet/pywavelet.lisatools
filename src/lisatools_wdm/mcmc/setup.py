@@ -14,16 +14,23 @@ from tqdm.auto import tqdm, trange
 from typing import List, Tuple
 
 
-def wrapper_likelihood(x, fixed_parameters, analysis:AnalysisContainer, **kwargs):
+def wrapper_likelihood(x, fixed_parameters, analysis:AnalysisContainer, wdm, **kwargs):
     all_parameters = np.zeros(8)
     lna = x[0]
     lnf = x[1]
     lnfdot = x[2]
     all_parameters[:] = np.array([np.exp(lna), np.exp(lnf), np.exp(lnfdot), *fixed_parameters])
-    ll = analysis.calculate_signal_likelihood(
-        *all_parameters,
-        source_only=True,
-    )
+
+    if wdm:
+        ll = analysis.calculate_wdm_likelihood(
+            *all_parameters,
+            source_only=True,
+        )
+    else:
+        ll = analysis.calculate_signal_likelihood(
+            *all_parameters,
+            source_only=True,
+        )
     return ll
 
 
@@ -132,9 +139,12 @@ def setup(
     plot_signal_on_characteristic_strain(char_strain, dt, "char_strain.png")
     plot_ae_time_domain(ae_data, dt, "tdi_time_domain.png")
     plot_ae_freq_domain(analysis, "tdi_freq_domain.png")
-    fig, ax = analysis.plot_wdm()
-    fig.savefig("tdi_wdm.png")
-    plt.close(fig)
+    try:
+        fig, ax = analysis.plot_wdm()
+        fig.savefig("tdi_wdm.png")
+        plt.close(fig)
+    except:
+        pass
 
     return MCMCData(
         gb=gb,
