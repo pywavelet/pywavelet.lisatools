@@ -11,6 +11,7 @@ from lisatools_wdm.waveform import GBWave
 from lisatools_wdm.plotting import plot_ae_time_domain, plot_ae_freq_domain, plot_signal_on_characteristic_strain
 from tqdm.auto import tqdm, trange
 import os
+from gap_study_utils.gaps import GapWindow
 
 from typing import List, Tuple
 
@@ -62,7 +63,23 @@ class MCMCData:
     prior_bounds: List[Tuple[float, float]]
     true: np.ndarray
     fixed_parameters: List[float]
+    gap_object: GapWindow
     outdir: str
+
+
+
+def generate_gap_mask(t0: float, T: float, dt: float):
+    Tinsec = T * 365.25 * 24 * 3600
+    t = np.arange(0, Tinsec+dt, dt)
+    gap_mask = np.ones_like(t, dtype=bool)
+    gap_duration = 7 * 3600  # 7 hours in seconds
+    gap_interval = 14 * 24 * 3600  # 14 days in seconds
+
+    for start in np.arange(0, Tinsec, gap_interval):
+        end = start + gap_duration
+        gap_mask[(t >= start) & (t < end)] = False
+
+    return gap_mask
 
 
 def setup(
@@ -81,6 +98,7 @@ def setup(
         psi=2.3290324,
         beta=0.9805742971871619,
         lam=5.22979888,
+        use_gaps=False,
         outdir='out_mcmc'
 ):
     os.makedirs(outdir, exist_ok=True)
@@ -94,6 +112,13 @@ def setup(
         "tdi": tdi_gen,
         "tdi_chan": "AE",
     }
+
+    # if use_gaps:
+    #     gap_mask = generate_gap_mask(t0, T, dt)
+    # else:
+    #     Tinsec = T * 365.25 * 24 * 3600
+    #     n = int(Tinsec / dt) + 1
+    #     gap_mask = np.ones(n, dtype=bool)
 
     gb = GBWave(use_gpu)
     char_strain = gb(A, f, fdot, iota, phi0, psi, T=T, dt=dt)

@@ -9,45 +9,33 @@ from lisatools_wdm.mcmc.emcee_analysis import run_emcee
 from lisatools_wdm.mcmc.setup import setup
 
 # get args from command line
+def main():
+    wdm = "--wdm" in sys.argv
+    print("Running for WDM: ", wdm)
+    outdir = 'out_mcmc_wdm' if wdm else 'out_mcmc_freq'
+    os.makedirs(outdir, exist_ok=True)
 
-if len(sys.argv) > 1:
-    wdm = sys.argv[1] == "--wdm"
-else:
-    wdm = False
-print("Running for WDM: ", wdm)
-OUTDIR = 'out_mcmc'
+    nsteps = 30
+    mcmc_data = setup(
+        T=0.2,
+        sampling_frequency=0.01,
+        outdir=outdir,
+    )
+    sampler = run_emcee(mcmc_data, nwalkers=10, nsteps=nsteps, wdm=wdm)
 
-if wdm:
-    OUTDIR += "_wdm"
-else:
-    OUTDIR += "_freq"
+    burnin = int(0.3 * nsteps)
+    samples = sampler.get_chain(flat=True, discard=burnin)
+    np.savetxt(f"{outdir}/samples.txt", samples)
 
-os.makedirs(OUTDIR, exist_ok=True)
+    inf_obj = az.from_emcee(sampler, var_names=["lnA", "lnf", "lnfdot"])
+    posterior = inf_obj.posterior.sel(draw=slice(burnin, None))
+    axes = az.plot_trace(posterior, compact=True)
 
-mcmc_data = setup(
-    T=0.2,
-    sampling_frequency=0.01,
-    outdir=OUTDIR,
+    trues = mcmc_data.true
+    for i, ax_set in enumerate(axes):
+        ax_set[0].axvline(trues[i], color="red", zorder=-1)
+        ax_set[1].axhline(trues[i], color="red", zorder=-1)
+    plt.savefig(f"{outdir}/trace.png")
 
-)
-sampler = run_emcee(mcmc_data, nwalkers=10, nsteps=300, wdm=wdm)
-samples = sampler.get_chain(flat=True, discard=100)
-# save samples to file
-np.savetxt(f"{OUTDIR}/samples.txt", samples)
-
-inf_obj = az.from_emcee(sampler, var_names=["lnA", "lnf", "lnfdot"])
-# az.to_netcdf(inf_obj, "mcmc_data.nc")
-posterior = inf_obj.posterior.stack(draws=("chain", "draw"))
-
-trues = mcmc_data.true
-
-# ditch the burnin
-burnin = 100
-# inf_obj = inf_obj.sel(draw=slice(burnin, None))
-# post = inf_obj.posterior.stack(draws=("chain", "draw"))
-post = inf_obj.posterior.sel(draw=slice(burnin, None))
-axes = az.plot_trace(post, compact=True, )
-for i, ax_set in enumerate(axes):
-    ax_set[0].axvline(trues[i], color="red", zorder=-1)
-    ax_set[1].axhline(trues[i], color="red", zorder=-1)
-plt.savefig(f"{OUTDIR}/trace.png")
+if __name__ == "__main__":
+    main()
