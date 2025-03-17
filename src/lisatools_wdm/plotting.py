@@ -34,3 +34,6 @@ def plot_signal_on_characteristic_strain(char_strain, dt, fname="char_strain.png
     plt.loglog(f, np.sqrt(Pxx))
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Characteristic Strain")
+    plt.ylim(min(Sn_char_strain), max(Sn_char_strain))
+    plt.savefig(fname)
+    plt.close()

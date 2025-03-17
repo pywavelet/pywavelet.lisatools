@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 import dataclasses
@@ -12,6 +11,25 @@ from lisatools_wdm.waveform import GBWave
 from lisatools_wdm.plotting import plot_ae_time_domain, plot_ae_freq_domain, plot_signal_on_characteristic_strain
 from tqdm.auto import tqdm, trange
 
+from typing import List, Tuple
+
+
+def wrapper_likelihood(x, fixed_parameters, analysis:AnalysisContainer, **kwargs):
+    all_parameters = np.zeros(8)
+    lna = x[0]
+    lnf = x[1]
+    lnfdot = x[2]
+    all_parameters[:] = np.array([np.exp(lna), np.exp(lnf), np.exp(lnfdot), *fixed_parameters])
+    ll = analysis.calculate_signal_likelihood(
+        *all_parameters,
+        source_only=True,
+    )
+    return ll
+
+
+
+
+
 @dataclasses.dataclass
 class MCMCData:
     gb: GBWave
@@ -19,11 +37,6 @@ class MCMCData:
     t0: float
     sampling_frequency: float
     dt: float
-    order: int
-    tdi_gen: str
-    index_lambda: int
-    index_beta: int
-    tdi_kwargs_esa: dict
     gb_lisa_esa: ResponseWrapper
     Nf: int
     A: float
@@ -38,27 +51,31 @@ class MCMCData:
     data: DataResidualArray
     sens_mat: SensitivityMatrix
     analysis: AnalysisContainer
+    prior_bounds: List[Tuple[float, float]]
+    true: np.ndarray
+    fixed_parameters: List[float]
+
 
 def setup(
-    use_gpu=False,
-    T=2.0,
-    t0=100000.0,
-    sampling_frequency=0.01,
-    order=25,
-    tdi_gen="2nd generation",
-    index_lambda=6,
-    index_beta=7,
-    Nf=64,
-    A=1.084702251e-22,
-    f=2.35962078e-3,
-    fdot=1.47197271e-17,
-    iota=1.11820901,
-    phi0=4.91128699,
-    psi=2.3290324,
-    beta=0.9805742971871619,
-    lam=5.22979888
+        use_gpu=False,
+        T=2.0,
+        t0=100000.0,
+        sampling_frequency=0.01,
+        order=25,
+        tdi_gen="2nd generation",
+        Nf=64,
+        A=1.084702251e-22,
+        f=2.35962078e-3,
+        fdot=1.47197271e-17,
+        iota=1.11820901,
+        phi0=4.91128699,
+        psi=2.3290324,
+        beta=0.9805742971871619,
+        lam=5.22979888
 ):
     default_args = [A, f, fdot, iota, phi0, psi, lam, beta]
+    index_lambda = len(default_args) - 2
+    index_beta = len(default_args) - 1
     dt = 1 / sampling_frequency
 
     tdi_kwargs_esa = {
@@ -85,7 +102,6 @@ def setup(
         **tdi_kwargs_esa,
     )
 
-
     ae_data = gb_lisa_esa(*default_args)
     data = DataResidualArray(ae_data, dt=dt, Nf=Nf)
 
@@ -97,6 +113,22 @@ def setup(
         dt=dt
     )
     analysis = AnalysisContainer(data, sens_mat, signal_gen=gb_lisa_esa, Nf=Nf)
+
+    snr = analysis.snr()
+    precision = A / np.sqrt(snr)
+    a_range = np.array([A - 1.5 * precision, A + 1.5 * precision])
+    lnA = np.log(A)
+    lnf = np.log(f)
+    lnfdot = np.log(fdot)
+
+    prior_bounds = [
+        (np.log(a_range[0]), np.log(a_range[1])),
+        (lnf - 0.001, lnf + 0.001),
+        (lnfdot - 0.001, lnfdot + 0.001),
+    ]
+    true = np.array([lnA, lnf, lnfdot])
+    fixed_parameters = [iota, phi0, psi, lam, beta]
+
     plot_signal_on_characteristic_strain(char_strain, dt, "char_strain.png")
     plot_ae_time_domain(ae_data, dt, "tdi_time_domain.png")
     plot_ae_freq_domain(analysis, "tdi_freq_domain.png")
@@ -110,11 +142,6 @@ def setup(
         t0=t0,
         sampling_frequency=sampling_frequency,
         dt=dt,
-        order=order,
-        tdi_gen=tdi_gen,
-        index_lambda=index_lambda,
-        index_beta=index_beta,
-        tdi_kwargs_esa=tdi_kwargs_esa,
         gb_lisa_esa=gb_lisa_esa,
         Nf=Nf,
         A=A,
@@ -128,5 +155,8 @@ def setup(
         default_args=default_args,
         data=data,
         sens_mat=sens_mat,
-        analysis=analysis
+        analysis=analysis,
+        prior_bounds=prior_bounds,
+        true=true,
+        fixed_parameters=fixed_parameters
     )

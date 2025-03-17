@@ -1,4 +1,4 @@
-from lisatools_wdm.mcmc.run_analysis import run_analysis
+from lisatools_wdm.mcmc.eryn_analysis import run_analysis
 from lisatools_wdm.mcmc.setup import setup
 
 

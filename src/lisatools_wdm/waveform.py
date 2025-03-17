@@ -4,6 +4,9 @@ except ImportError:
     import numpy as xp
 import numpy as np
 
+import functools
+import warnings
+
 
 
 
@@ -19,10 +22,18 @@ class GBWave:
         else:
             self.xp = np
 
-    def __call__(self, A, f, fdot, iota, phi0, psi, T=1.0, dt=10.0):
 
+    def __call__(self, A, f, fdot, iota, phi0, psi, T, dt):
         # get the t array
-        t = self.xp.arange(0.0, T * YRSID_SI, dt)
+
+
+        if not hasattr(self, "_t"):
+            self._compute_times(T, dt)
+        if T != self._T:
+            warnings.warn("T has changed, recomputing t array")
+            self._compute_times(T, dt)
+
+        t = self._t
         cos2psi = self.xp.cos(2.0 * psi)
         sin2psi = self.xp.sin(2.0 * psi)
         cosiota = self.xp.cos(iota)
@@ -42,3 +53,9 @@ class GBWave:
         hc = hSp * sin2psi + hSc * cos2psi
 
         return hp + 1j * hc
+
+
+    def _compute_times(self, T, dt):
+        self._T = T
+        self._dt = dt
+        self._t = self.xp.arange(0.0, T * YRSID_SI, dt)
