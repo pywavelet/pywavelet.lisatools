@@ -10,6 +10,7 @@ from lisatools_wdm.analysiscontainer import AnalysisContainer
 from lisatools_wdm.waveform import GBWave
 from lisatools_wdm.plotting import plot_ae_time_domain, plot_ae_freq_domain, plot_signal_on_characteristic_strain
 from tqdm.auto import tqdm, trange
+import os
 
 from typing import List, Tuple
 
@@ -61,6 +62,7 @@ class MCMCData:
     prior_bounds: List[Tuple[float, float]]
     true: np.ndarray
     fixed_parameters: List[float]
+    outdir: str
 
 
 def setup(
@@ -78,8 +80,10 @@ def setup(
         phi0=4.91128699,
         psi=2.3290324,
         beta=0.9805742971871619,
-        lam=5.22979888
+        lam=5.22979888,
+        outdir='out_mcmc'
 ):
+    os.makedirs(outdir, exist_ok=True)
     default_args = [A, f, fdot, iota, phi0, psi, lam, beta]
     index_lambda = len(default_args) - 2
     index_beta = len(default_args) - 1
@@ -136,12 +140,12 @@ def setup(
     true = np.array([lnA, lnf, lnfdot])
     fixed_parameters = [iota, phi0, psi, lam, beta]
 
-    plot_signal_on_characteristic_strain(char_strain, dt, "char_strain.png")
-    plot_ae_time_domain(ae_data, dt, "tdi_time_domain.png")
-    plot_ae_freq_domain(analysis, "tdi_freq_domain.png")
+    plot_signal_on_characteristic_strain(char_strain, dt, f"{outdir}/char_strain.png")
+    plot_ae_time_domain(ae_data, dt, f"{outdir}/tdi_time_domain.png")
+    plot_ae_freq_domain(analysis, f"{outdir}/tdi_freq_domain.png")
     try:
         fig, ax = analysis.plot_wdm()
-        fig.savefig("tdi_wdm.png")
+        fig.savefig(f"{outdir}/tdi_wdm.png")
         plt.close(fig)
     except:
         pass
@@ -168,5 +172,6 @@ def setup(
         analysis=analysis,
         prior_bounds=prior_bounds,
         true=true,
-        fixed_parameters=fixed_parameters
+        fixed_parameters=fixed_parameters,
+        outdir=outdir
     )
