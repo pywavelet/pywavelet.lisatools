@@ -10,7 +10,7 @@ mcmc_data = setup(
         T=0.2,
         sampling_frequency=0.01
 )
-sampler = run_emcee(mcmc_data, nwalkers=10, nsteps=300, wdm=True)
+sampler = run_emcee(mcmc_data, nwalkers=10, nsteps=300, wdm=False)
 
 
 inf_obj = az.from_emcee(sampler, var_names=["lnA", "lnf", "lnfdot"])
