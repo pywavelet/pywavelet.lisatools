@@ -52,6 +52,6 @@ def plot_lnl(a_range, lnl, wdm_lnl, A, precision, fname="lnl_scan.png"):
     ax.set_ylabel("Freq LnL")
     ax2.set_ylabel("WDM LnL")
     plt.tight_layout()
-    fig.savefig("lnl_scan.png")
+    fig.savefig(fname)
     plt.close(fig)
 

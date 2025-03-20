@@ -63,23 +63,10 @@ class MCMCData:
     prior_bounds: List[Tuple[float, float]]
     true: np.ndarray
     fixed_parameters: List[float]
-    gap_object: GapWindow
     outdir: str
 
 
 
-def generate_gap_mask(t0: float, T: float, dt: float):
-    Tinsec = T * 365.25 * 24 * 3600
-    t = np.arange(0, Tinsec+dt, dt)
-    gap_mask = np.ones_like(t, dtype=bool)
-    gap_duration = 7 * 3600  # 7 hours in seconds
-    gap_interval = 14 * 24 * 3600  # 14 days in seconds
-
-    for start in np.arange(0, Tinsec, gap_interval):
-        end = start + gap_duration
-        gap_mask[(t >= start) & (t < end)] = False
-
-    return gap_mask
 
 
 def setup(
@@ -113,15 +100,12 @@ def setup(
         "tdi_chan": "AE",
     }
 
-    # if use_gaps:
-    #     gap_mask = generate_gap_mask(t0, T, dt)
-    # else:
-    #     Tinsec = T * 365.25 * 24 * 3600
-    #     n = int(Tinsec / dt) + 1
-    #     gap_mask = np.ones(n, dtype=bool)
 
-    gb = GBWave(use_gpu)
+    gb = GBWave(use_gpu, use_gaps)
     char_strain = gb(A, f, fdot, iota, phi0, psi, T=T, dt=dt)
+
+
+
     gb_lisa_esa = ResponseWrapper(
         gb,
         T,

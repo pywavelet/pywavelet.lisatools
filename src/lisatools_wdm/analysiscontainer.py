@@ -15,10 +15,15 @@ class AnalysisContainer(analysiscontainer.AnalysisContainer):
             data_res_arr: DataResidualArray,
             sens_mat: SensitivityMatrix,
             Nf: int,
+            gap_mask: np.ndarray,
             signal_gen: Optional[callable] = None,
     ) -> None:
         super().__init__(data_res_arr, sens_mat, signal_gen)
         self.Nf = Nf
+        self.gap_mask = gap_mask # time points [0 for gap, 1 for data]
+
+
+
 
     def calculate_wdm_likelihood(self,
                                  *args: Any,
@@ -68,18 +73,23 @@ class AnalysisContainer(analysiscontainer.AnalysisContainer):
 
         axes[0, 0].set_title("Data")
         axes[0, ax_psd_idx].set_title("PSD")
+        plt.tight_layout()
 
         return fig, axes
 
 
 def compute_likelihood(
-        data: List[Wavelet], template: List[Wavelet], psd: List[Wavelet]
+        data: List[Wavelet], template: List[Wavelet], psd: List[Wavelet], mask: Optional[List[Wavelet]] = None
 ) -> float:
     lnl = np.zeros(len(data))
     for i in range(len(data)):
         d = data[i].data
         h = template[i].data
         p = psd[i].data
+
+        if mask is not None:
+            d, h, p = d[mask[i].data], h[mask[i].data], p[mask[i].data]
+
         lnl[i] = -0.5 * np.nansum((d - h) ** 2 / p)
 
     return np.sum(lnl)

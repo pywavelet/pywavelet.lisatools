@@ -37,5 +37,13 @@ def main():
         ax_set[1].axhline(trues[i], color="red", zorder=-1)
     plt.savefig(f"{outdir}/trace.png")
 
+
+# load samples.txt
+
+def load_samples():
+    samples = np.loadtxt("out_mcmc_wdm/samples.txt")
+    print(samples.shape)
+
+
 if __name__ == "__main__":
     main()

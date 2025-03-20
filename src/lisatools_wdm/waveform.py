@@ -15,12 +15,14 @@ YRSID_SI = 31558149.763545603
 
 
 class GBWave:
-    def __init__(self, use_gpu=False):
+    def __init__(self, use_gpu=False, use_gaps=False):
 
         if use_gpu:
             self.xp = xp
         else:
             self.xp = np
+
+        self.use_gaps = use_gaps
 
 
     def __call__(self, A, f, fdot, iota, phi0, psi, T, dt):
@@ -32,6 +34,7 @@ class GBWave:
         if T != self._T:
             warnings.warn("T has changed, recomputing t array")
             self._compute_times(T, dt)
+
 
         t = self._t
         cos2psi = self.xp.cos(2.0 * psi)
@@ -52,10 +55,28 @@ class GBWave:
         hp = hSp * cos2psi - hSc * sin2psi
         hc = hSp * sin2psi + hSc * cos2psi
 
-        return hp + 1j * hc
+        return hp + 1j * hc * self.gap_mask
 
 
     def _compute_times(self, T, dt):
+        Tsec = T * YRSID_SI
         self._T = T
         self._dt = dt
-        self._t = self.xp.arange(0.0, T * YRSID_SI, dt)
+        self._t = self.xp.arange(0.0, Tsec, dt)
+        if self.use_gaps:
+            self.gap_mask = generate_gap_mask(self._t, Tsec)
+        else:
+            self.gap_mask = self.xp.ones_like(self._t, dtype=int)
+
+
+
+def generate_gap_mask(t,Tsec):
+    gap_mask = np.ones_like(t, dtype=int)
+    gap_duration = 7 * 3600  # 7 hours in seconds
+    gap_interval = 14 * 24 * 3600  # 14 days in seconds
+
+    for start in np.arange(0, Tsec, gap_interval):
+        end = start + gap_duration
+        gap_mask[(t >= start) & (t < end)] = 0
+
+    return gap_mask
